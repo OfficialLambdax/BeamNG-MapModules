@@ -1,0 +1,35 @@
+{
+  "Portal_Burst": {
+    "name": "Portal_Burst",
+    "class": "ParticleEmitterData",
+    "persistentId": "ba06a6e2-af33-44cf-94d9-9397f875fc74",
+    "backLighting": 100,
+    "blendStyle": "ADDITIVE",
+    "ejectionPeriodMS": 200,
+    "ejectionVelocity": 0.5,
+    "particles": "Portal_BurstParticle",
+    "phiVariance": 0,
+    "softParticles": "0",
+    "thetaMax": 3,
+    "useLighting": false,
+    "velocityVariance": 0
+  },
+  "Portal_Ring": {
+    "name": "Portal_Ring",
+    "class": "ParticleEmitterData",
+    "persistentId": "ba06a6e2-af33-44cf-94d9-9397f875fc74",
+    "backLighting": 100,
+    "blendStyle": "ADDITIVE",
+    "ejectionOffset": 2,
+    "ejectionPeriodMS": 200,
+    "ejectionVelocity": 0.100000016,
+    "particles": "Portal_RingParticle",
+    "phiReferenceVel": 90,
+    "phiVariance": 0,
+    "renderReflection": false,
+    "softParticles": "0",
+    "thetaMin": 90,
+    "useLighting": false,
+    "velocityVariance": 0
+  }
+}

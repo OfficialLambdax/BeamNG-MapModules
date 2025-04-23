@@ -1,0 +1,96 @@
+{
+  "Portal_BurstParticle": {
+    "name": "Portal_BurstParticle",
+    "class": "ParticleData",
+    "persistentId": "9afa19f8-a05d-4220-aba9-fa9dac60d613",
+    "animTexName": "core/art/defaultParticle.png",
+    "colors": [
+      [
+        0.733333349,
+        1,
+        0,
+        0.274509817
+      ],
+      [
+        1,
+        0.623529434,
+        0,
+        0.666666687
+      ],
+      [
+        1,
+        0.356862754,
+        0,
+        0.549019635
+      ],
+      [
+        1,
+        0.34117648,
+        0.0235294141,
+        0
+      ]
+    ],
+    "constantAcceleration": 3,
+    "lifetimeMS": 3000,
+    "lifetimeVarianceMS": 200,
+    "sizes": [
+      0.100000016,
+      0.299999923,
+      0.499999911,
+      0.699999928
+    ],
+    "spinRandomMin": -180,
+    "textureName": "core/art/defaultParticle.png",
+    "useInvAlpha": true
+  },
+  "Portal_RingParticle": {
+    "name": "Portal_RingParticle",
+    "class": "ParticleData",
+    "persistentId": "9afa19f8-a05d-4220-aba9-fa9dac60d613",
+    "animTexName": "core/art/defaultParticle.png",
+    "colors": [
+      [
+        1,
+        0.34289676,
+        0.0235294104,
+        0
+      ],
+      [
+        1,
+        0.356795967,
+        0,
+        1
+      ],
+      [
+        1,
+        0.624392986,
+        0,
+        0.549019635
+      ],
+      [
+        0.733333349,
+        1,
+        0,
+        0.274509817
+      ]
+    ],
+    "constantAcceleration": -1,
+    "lifetimeMS": 7400,
+    "sizes": [
+      0.800000072,
+      0.699999928,
+      0.599999905,
+      0.099999927
+    ],
+    "spinRandomMin": -180,
+    "spinSpeed": 0.299999923,
+    "textureName": "core/art/defaultParticle.png",
+    "times": [
+      null,
+      0.230000019,
+      0.560000002,
+      null
+    ],
+    "useInvAlpha": true
+  }
+}
