@@ -9,10 +9,11 @@
 ]]
 
 local M = {
-	_VERSION = '0.2' -- 22.05.2025 (DD.MM.YYYY)
+	_VERSION = '0.3' -- 23.05.2025 (DD.MM.YYYY)
 }
-local MODULES = {}
-
+local GE_MODULES = {}
+local VE_MODULES = {}
+local LEVEL_NAME = ''
 
 -- -------------------------------------------------------------------
 -- Common
@@ -39,64 +40,87 @@ end
 local function fileNameNoExt(path)
 	local file_name = fileName(path)
 	local ext = (fileExtension(file_name) or ''):lower()
-	if ext ~= "lua" then return end
 	
-	return file_name:sub(1, #file_name - #ext - 1)
+	return file_name:sub(1, #file_name - #ext - 1) -- what if #ext == 0
 end
 
 -- -------------------------------------------------------------------
 -- Module loader
 local function loadLevelModule(path)
 	local module = fileNameNoExt(path)
-	if not module then return end -- not a lua file
 	
 	local ok, r = pcall(extensions.loadAtRoot, path:sub(1, #path - 4), "")
 	if not ok then
 		log('E', 'mainLevel.module_loader', r)
 		return
 	end
-	log('I', 'mainLevel.module_loader', 'Loaded level module "' .. module .. '"')
+	log('I', 'mainLevel.module_loader', '-> Loaded level module "' .. module .. '"')
 	
-	local ext = _G[module]
-	if ext then MODULES[module] = module end
+	if _G[module] then table.insert(GE_MODULES, module) end
 end
 
 -- -------------------------------------------------------------------
 -- Load/Unload
+local function vehicleInit(vehicle_id)
+	if #VE_MODULES == 0 then return end
+	
+	local exec = ''
+	for _, module in ipairs(VE_MODULES) do
+		exec = exec .. 'extensions.loadAtRoot("' .. module .. '", "") '
+	end
+	getObjectByID(vehicle_id):queueLuaCommand(exec)
+end
+
 local function init()
-	local level_name = myLevelName()
-	log('I', 'mainLevel.module_loader', 'Loading modules for map "' .. level_name .. '"')
-	for _, path in ipairs(FS:directoryList('levels/' .. level_name .. '/lua/') or {}) do
-		loadLevelModule(path)
+	LEVEL_NAME = myLevelName()
+	log('I', 'mainLevel.module_loader', 'Loading GE modules for map "' .. LEVEL_NAME .. '"')
+	for _, path in ipairs(FS:directoryList('levels/' .. LEVEL_NAME .. '/lua/') or {}) do
+		if (fileExtension(path) or ''):lower() == 'lua' then
+			loadLevelModule(path)
+		end
+	end
+	
+	log('I', 'mainLevel.module_loader', 'Indexing VE modules for map "' .. LEVEL_NAME .. '"')
+	for _, path in ipairs(FS:directoryList('levels/' .. LEVEL_NAME .. '/vlua/') or {}) do
+		if (fileExtension(path) or ''):lower() == 'lua' then
+			table.insert(VE_MODULES, path:sub(1, #path - 4))
+			log('I', 'mainLevel.module_loader', '-> Learned of "' .. fileName(path) .. '"')
+		end
+	end
+	
+	-- for hotreloads
+	for _, vehicle in ipairs(getAllVehicles()) do
+		vehicleInit(vehicle:getId())
 	end
 end
 
 local function unload()
-	log('I', 'mainLevel.module_loader', 'Unloading all map modules')
-	for module, _ in pairs(MODULES) do
+	log('I', 'mainLevel.module_loader', 'Unloading all GE map modules')
+	for _, module in ipairs(GE_MODULES) do
 		local ok, r = pcall(extensions.unload, module)
 		if not ok then
 			log('E', 'mainLevel.module_loader', r)
 		else
-			log('I', 'mainLevel.module_loader', 'Unloaded level module "' .. module .. '"')
+			log('I', 'mainLevel.module_loader', '-> Unloaded level module "' .. module .. '"')
 		end
 	end
-	MODULES = {}
-end
-
-M.reload = function()
-	unload()
-	init()
+	GE_MODULES = {}
+	
+	log('I', 'mainLevel.module_loader', 'Unloading all VE map modules')
+	local exec = ''
+	for _, module in ipairs(VE_MODULES) do
+		exec = exec .. 'extensions.unload("' .. fileName(module) .. '") '
+	end
+	for _, vehicle in ipairs(getAllVehicles()) do
+		vehicle:queueLuaCommand(exec)
+	end
+	VE_MODULES = {}
 end
 
 -- -------------------------------------------------------------------
 -- Game events
-M.onExtensionLoaded = function() -- ran by game on load and for manual reloads
-	init()
-end
-
-M.onExtensionUnloaded = function()
-	unload()
-end
+M.onExtensionLoaded = init -- ran by game on load and for manual reloads
+M.onExtensionUnloaded = unload
+M.onVehicleSpawned = vehicleInit
 
 return M
