@@ -1,7 +1,9 @@
 -- Made by Neverless @ BeamMP. Problems, Questions or requests? Feel free to ask.
 local M = {}
-M.version = "0.1"
-M.version_release = "30.07.2024"
+M.version = "0.2"
+M.version_release = "23.05.2025"
+
+local FLARES = {"vehicleBrakeLightFlare", "vehicleHeadLightFlare", "vehicleReverseLightFlare"}
 
 -- ---------------------------------------------------------------------------------------------------
 -- The most likely function you use
@@ -16,12 +18,12 @@ M.version_release = "30.07.2024"
 M.autoDetect = function(scenetree_group_name)
 	M.wipe()
 	if scenetree_group_name == nil then
-		log("e", "AutoLights", "scenetree_group_name is nil")
+		log("E", "TriggerLights", "scenetree_group_name is nil")
 		return nil
 	end
 	local scenetree_group = scenetree[scenetree_group_name]
 	if scenetree_group == nil then
-		log("e", "AutoLights", 'No Scenetree group with the name "' .. scenetree_group_name .. '"')
+		log("E", "TriggerLights", 'No Scenetree group with the name "' .. scenetree_group_name .. '"')
 		return false
 	end
 	
@@ -31,28 +33,33 @@ M.autoDetect = function(scenetree_group_name)
 			-- wtf is this
 			
 		elseif scenetree_folder:getClassName() ~= "SimGroup" then
-			log("e", "AutoLights", 'Ignoring "' .. scenetree_folder:getName() .. '". Not a folder.')
+			log("E", "TriggerLights", 'Ignoring "' .. scenetree_folder:getName() .. '". Not a folder.')
 			
 		else
 			-- eval group restrictions
 			local can_day = true
 			local can_night = true
+			local is_photograph = false
 			if scenetree_folder:getName():find("DD") then
 				can_night = false
 			elseif scenetree_folder:getName():find("NN") then
 				can_day = false
 			end
 			
+			if scenetree_folder:getName():find("PP") then
+				is_photograph = true
+			end
+			
 			-- sort triggers and lights
 			local group = {triggers = {}, lights = {}}
 			for _, obj_name in pairs(scenetree_folder:getObjects()) do
-				M.addObject(scenetree.findObject(obj_name), group)
+				M.addObject(scenetree.findObject(obj_name), group, is_photograph)
 			end
 			
 			-- register triggers
 			for obj_name, _ in pairs(group.triggers) do
 				if M.AUTOLIGHTS:newGroupOrAdd(scenetree_folder:getName(), obj_name, can_day, can_night) then
-					log("i", "AutoLights", 'Detected Group "' .. scenetree_folder:getName() .. '"')
+					log("I", "TriggerLights", 'Detected Group "' .. scenetree_folder:getName() .. '"')
 				end
 			end
 			
@@ -60,7 +67,7 @@ M.autoDetect = function(scenetree_group_name)
 			for obj_name, obj_eval in pairs(group.lights) do
 				local lights = M.AUTOLIGHTS:exists(scenetree_folder:getName())
 				if lights == nil then
-					log("e", "AutoLights", 'Cannot add "' .. obj_name .. '" to group "' .. scenetree_folder:getName() .. '". Group is unknown. Trigger doesnt exists')
+					log("E", "TriggerLights", 'Cannot add "' .. obj_name .. '" to group "' .. scenetree_folder:getName() .. '". Group is unknown. Trigger doesnt exists')
 					
 				else
 					lights:addLight(obj_eval.reference, obj_eval.can_day, obj_eval.can_night)
@@ -72,18 +79,18 @@ M.autoDetect = function(scenetree_group_name)
 	-- check groups
 	for group_name, lights in pairs(M.AUTOLIGHTS:getAll()) do
 		if lights:lightAmount() == 0 then
-			log("e", "AutoLights", 'Group "' .. group_name .. '" has no known lights')
+			log("E", "TriggerLights", 'Group "' .. group_name .. '" has no known lights')
 			M.AUTOLIGHTS:remove(group_name)
 			
 		else
-			log("i", "AutoLights", 'Watching group "' .. group_name .. '" with ' .. lights:lightAmount() .. ' lights')
+			log("I", "TriggerLights", 'Watching group "' .. group_name .. '" with ' .. lights:lightAmount() .. ' lights')
 		end
 	end
 	
 	return true
 end
 
-M.addObject = function(obj_eval, group)
+M.addObject = function(obj_eval, group, is_photograph)
 	local object = {reference = obj_eval, can_day = true, can_night = true}
 	if obj_eval:getName():find("DD") then
 		object.can_night = false
@@ -98,6 +105,12 @@ M.addObject = function(obj_eval, group)
 		obj_eval:setField("luaFunction", 0, "onBeamNGTrigger")
 		
 	elseif obj_eval:getClassName() == "SpotLight" or obj_eval:getClassName() == "PointLight" then
+		if is_photograph then
+			obj_eval:setField("flareType", 0, FLARES[math.random(1, #FLARES)])
+			obj_eval:setField("animationType", 0, "BlinkLightAnim")
+			obj_eval:setField("animationPeriod", 0, math.random(200, 2000) / 1000)
+		end
+		
 		group.lights[obj_eval:getName()] = object
 	end
 end
@@ -141,7 +154,7 @@ end
 M.timeOfDay = function()
     local tod = scenetree.tod
     if not tod then
-		log("e", "AutoLights", "scenetree.tod is unavailable on this map")
+		log("E", "TriggerLights", "scenetree.tod is unavailable on this map")
 		return {state = 2}
 	end
 	
@@ -337,6 +350,12 @@ end
 
 -- ---------------------------------------------------------------------------------------------------
 -- Events
+local function onExtensionLoaded()
+	if worldReadyState == 2 then
+		M.autoDetect("triggerlights")
+	end
+end
+
 local function onWorldReadyState(state)
 	if state == 2 then
 		M.autoDetect("triggerlights")
@@ -347,9 +366,13 @@ local function onBeamNGTrigger(trigger_eventobj)
 	M.AUTOLIGHTS:exec(trigger_eventobj)
 end
 
-M.onUpdate = function() end
+local function onEditorDeactivated()
+	M.autoDetect("triggerlights")
+end
 
 M.onBeamNGTrigger = onBeamNGTrigger
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 M.onWorldReadyState = onWorldReadyState
+M.onExtensionLoaded = onExtensionLoaded
+M.onEditorDeactivated = onEditorDeactivated
 return M
