@@ -1,8 +1,8 @@
 -- Made by Neverless @ BeamMP. Problems, Questions or requests? Feel free to ask.
 --[[
 	Todo
-		- Vehicle reset should quit transitions
 		- Sound effects
+		- BeamMP Support
 	
 	Credits
 		- Zeit for the help with the flight rotation in the mfd discord
@@ -127,6 +127,7 @@ local function vehicleMoveToPosition(vehicle, tar_pos, max_speed, strength_range
 	end
 end
 
+--[[
 local function vehicleMoveToPosition2(dt, vehicle, tar_pos, max_speed, strength_range)
 	local v_pos = vehicle:getPosition()
 	local t_dir = (tar_pos - v_pos):normalized()
@@ -149,6 +150,7 @@ local function vehicleMoveToPosition2(dt, vehicle, tar_pos, max_speed, strength_
 	
 	vehicle:setClusterPosRelRot(vehicle:getRefNodeId(), next_pos.x, next_pos.y, next_pos.z, t_rot.x, t_rot.y, t_rot.z, t_rot.w)
 end
+]]
 
 local function evalValidPortalLinks(portal_group, trigger_name)
 	local portal_links = {}
@@ -556,7 +558,7 @@ end
 -- Transition
 local function engageTransition(portal_group, portal, vehicle_id)
 	local path = getPortalPath(portal_group, portal)
-	if not path then -- if tp
+	if not path or isBeamMPSession() then -- if tp or isBeamMPSession <<<-----<<<<<
 		TRANSITIONS[vehicle_id] = {
 			mode = 1,
 			stage = 1,
@@ -600,10 +602,13 @@ local function teleportTransition(transition, vehicle)
 		if is_own then
 			local portal_link = getLinkedPortal(transition.portal_group, transition.portal)
 			local pos_vec = evalTPPosition(portal_link.trigger:getPosition(), vehicle)
-			--vehicle:setPositionNoPhysicsReset(pos_vec)
+			vehicle:setPositionNoPhysicsReset(pos_vec) -- this has a chance to still reset the vehicle
+			-- but setClusterPosRelRot is really bad for sync
+			--[[
 			vehicle:setClusterPosRelRot(vehicle:getRefNodeId(), pos_vec.x, pos_vec.y, pos_vec.z + 0.2, 0, 0, 0, 0)
 			local vel = -vehicle:getVelocity()
 			vehicle:applyClusterVelocityScaleAdd(vehicle:getRefNodeId(), 1, vel.x, vel.y, vel.z)
+			]]
 		end
 		data.timer:stopAndReset()
 		transition.stage = 4
@@ -624,25 +629,10 @@ local function pathTransition(transition, vehicle, dt)
 	local is_own = isOwn(vehicle:getId())
 	if transition.stage == 1 then
 		vehicle:queueLuaCommand("obj:setGhostEnabled(true)")
-		
-		local obj = createObject("SpotLight")
-		obj.useInstanceRenderData = 1
-		obj.color = COLOR_PORTAL_PATHER
-		obj.isEnabled = true
-		obj:setField("flareType", 0, "SunFlareExample")
-		obj.range = 20
-		obj.innerAngle = 40
-		obj.outerAngle = 45
-		obj.brightness = 1
-		obj.castShadows = false
-		local pos = vehicle:getPosition()
-		local rot = quatFromDir(vec3(0, 0, -1), vec3(0, 0, -1))
-		obj:setPosRot(pos.x, pos.y, pos.z + 10, rot.x, rot.y, rot.z, rot.w)
-		obj:registerObject("transition_light_" .. vehicle:getId())
-		transition.spotlight = obj
+		vehicle:queueLuaCommand("portals.setState(true)")
 		
 		-- this is alot smoother but there is a chance that the vehicle clashes with the ground on last node because of the release spazz
-		--data.path[#data.path] = evalTPPosition(data.path[#data.path], vehicle, 3)
+		data.path[#data.path] = evalTPPosition(data.path[#data.path], vehicle, 3)
 		data.timer = hptimer()
 		transition.stage = 2
 		
@@ -662,13 +652,12 @@ local function pathTransition(transition, vehicle, dt)
 		transition.stage = 3
 		
 	elseif transition.stage == 3 then
-		transition.spotlight:setPosition(vehicle:getPosition() + vec3(0, 0, 10))
 		local dist = dist3d(vehicle:getPosition(), data.to_pos)
 		if data.to_id < #data.path then
 			if dist > 1 then
-				--if is_own then
-					vehicleMoveToPosition2(dt, vehicle, data.to_pos, TRANSITION_PATH_SPEED, 3)
-				--end
+				if is_own then
+					vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED, 0)
+				end
 				return
 			else
 				data.to_id = data.to_id + 1
@@ -678,20 +667,21 @@ local function pathTransition(transition, vehicle, dt)
 			
 		else -- final node
 			if dist > 12 then
-				--if is_own then
-					vehicleMoveToPosition2(dt, vehicle, data.to_pos, TRANSITION_PATH_SPEED, 20)
-				--end
-			elseif dist > 1 then -- we must switch to scaleadd before arrival because setClusterPosRelRot most often releases alot of spazz leading to vehicle destruction once the effect is stopped
-				--if is_own then
+				if is_own then
+					vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED, 20)
+				end
+			elseif dist > 1 then
+				if is_own then
 					vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED_FINAL, 5)
-				--end
+				end
 			else
 				transition.stage = 4
 			end
 		end
 	
 	elseif transition.stage == 4 then
-		--if is_own then
+		--[[
+		if is_own then
 			local pos_vec = evalTPPosition(data.to_pos, vehicle)
 			local v_pos = vehicle:getPosition()
 			local t_dir = (pos_vec - v_pos):normalized()
@@ -700,8 +690,8 @@ local function pathTransition(transition, vehicle, dt)
 			vehicle:setClusterPosRelRot(vehicle:getRefNodeId(), pos_vec.x, pos_vec.y, pos_vec.z + 0.2, t_rot.x, t_rot.y, t_rot.z, t_rot.w)
 			local vel = -vehicle:getVelocity()
 			vehicle:applyClusterVelocityScaleAdd(vehicle:getRefNodeId(), 1, vel.x, vel.y, vel.z)
-		--end
-		transition.spotlight:delete()
+		end
+		]]
 		vehicle:setMeshAlpha(0.5, "", false)
 		data.timer:stopAndReset()
 		transition.stage = 6
@@ -713,6 +703,7 @@ local function pathTransition(transition, vehicle, dt)
 		if isAnyVehicleInsideRadius(vehicle:getPosition(), 5, vehicle:getId()) then return end
 		vehicle:queueLuaCommand("obj:setGhostEnabled(false)")
 		vehicle:setMeshAlpha(1, "", false)
+		vehicle:queueLuaCommand("portals.setState(false)")
 		return true
 	end
 end
@@ -828,7 +819,11 @@ M.onUpdate = function(dt)
 end
 
 M.onExtensionLoaded = function()
-	init()
+	if worldReadyState == 2 then init() end
+end
+
+M.onWorldReadyState = function(state)
+	if state == 2 then init() end
 end
 
 M.onExtensionUnloaded = function()
@@ -839,12 +834,25 @@ M.onClientEndMission = function()
 	unload()
 end
 
+M.onEditorDeactivated = function()
+	unload()
+	init()
+end
+
 M.onBeamNGTrigger = function(data)
 	local known = TRIGGERS[data.triggerName]
 	if known and data.event == "enter" then
 		if not TRANSITIONS[data.subjectID] and not known.portal.disabled then
 			engageTransition(known.portal_group, known.portal, data.subjectID)
 		end
+	end
+end
+
+M.onVehicleReset = function(vehicle_id)
+	local transition = TRANSITIONS[vehicle_id]
+	if not transition then return end
+	if transition.mode == 2 then
+		transition.stage = 6
 	end
 end
 
