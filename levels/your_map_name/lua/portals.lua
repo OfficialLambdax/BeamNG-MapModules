@@ -15,8 +15,8 @@ local ROOT_GROUP = "Portals"
 local DEFAULT_PORTAL_SCALE = vec3(3, 3, 3)
 local DEFAULT_PORTAL_Z_OFFSET = vec3(0, 0, 1)
 
-local TRANSITION_PATH_SPEED = 30
-local TRANSITION_PATH_SPEED_FINAL = TRANSITION_PATH_SPEED / 2
+local TRANSITION_PATH_SPEED = 60
+local TRANSITION_PATH_SPEED_FINAL = TRANSITION_PATH_SPEED / 2.5
 
 local RENDER_RANGE_PORTAL = 150
 
@@ -558,7 +558,7 @@ end
 -- Transition
 local function engageTransition(portal_group, portal, vehicle_id)
 	local path = getPortalPath(portal_group, portal)
-	if not path or isBeamMPSession() then -- if tp or isBeamMPSession <<<-----<<<<<
+	if not path then -- if tp
 		TRANSITIONS[vehicle_id] = {
 			mode = 1,
 			stage = 1,
@@ -581,9 +581,8 @@ end
 
 local function teleportTransition(transition, vehicle)
 	local data = transition.data
-	local is_own = isOwn(vehicle:getId())
 	if transition.stage == 1 then
-		vehicle:queueLuaCommand("obj:setGhostEnabled(true)")
+		vehicle:queueLuaCommand("electrics.values.portal_transition = true")
 		vehicle:setMeshAlpha(0.5, "", false)
 		
 		data.timer = hptimer()
@@ -591,25 +590,21 @@ local function teleportTransition(transition, vehicle)
 		
 	elseif transition.stage == 2 then
 		if data.timer:stop() < 500 then
-			if is_own then
-				vehicleMoveToPosition(vehicle, transition.portal.trigger:getPosition() + vec3(0, 0, 1), 100)
-			end
+			vehicleMoveToPosition(vehicle, transition.portal.trigger:getPosition() + vec3(0, 0, 1), 100)
 			return
 		end
 		transition.stage = 3
 		
 	elseif transition.stage == 3 then
-		if is_own then
-			local portal_link = getLinkedPortal(transition.portal_group, transition.portal)
-			local pos_vec = evalTPPosition(portal_link.trigger:getPosition(), vehicle)
-			vehicle:setPositionNoPhysicsReset(pos_vec) -- this has a chance to still reset the vehicle
-			-- but setClusterPosRelRot is really bad for sync
-			--[[
-			vehicle:setClusterPosRelRot(vehicle:getRefNodeId(), pos_vec.x, pos_vec.y, pos_vec.z + 0.2, 0, 0, 0, 0)
-			local vel = -vehicle:getVelocity()
-			vehicle:applyClusterVelocityScaleAdd(vehicle:getRefNodeId(), 1, vel.x, vel.y, vel.z)
-			]]
-		end
+		local portal_link = getLinkedPortal(transition.portal_group, transition.portal)
+		local pos_vec = evalTPPosition(portal_link.trigger:getPosition(), vehicle)
+		vehicle:setPositionNoPhysicsReset(pos_vec) -- this has a chance to still reset the vehicle
+		-- but setClusterPosRelRot is really bad for sync
+		--[[
+		vehicle:setClusterPosRelRot(vehicle:getRefNodeId(), pos_vec.x, pos_vec.y, pos_vec.z + 0.2, 0, 0, 0, 0)
+		local vel = -vehicle:getVelocity()
+		vehicle:applyClusterVelocityScaleAdd(vehicle:getRefNodeId(), 1, vel.x, vel.y, vel.z)
+		]]
 		data.timer:stopAndReset()
 		transition.stage = 4
 		
@@ -618,7 +613,7 @@ local function teleportTransition(transition, vehicle)
 			return
 		end
 		if isAnyVehicleInsideRadius(vehicle:getPosition(), 5, vehicle:getId()) then return end
-		vehicle:queueLuaCommand("obj:setGhostEnabled(false)")
+		vehicle:queueLuaCommand("electrics.values.portal_transition = false")
 		vehicle:setMeshAlpha(1, "", false)
 		return true
 	end
@@ -626,9 +621,8 @@ end
 
 local function pathTransition(transition, vehicle, dt)
 	local data = transition.data
-	local is_own = isOwn(vehicle:getId())
 	if transition.stage == 1 then
-		vehicle:queueLuaCommand("obj:setGhostEnabled(true)")
+		vehicle:queueLuaCommand("electrics.values.portal_transition = true")
 		vehicle:queueLuaCommand("portals.setState(true)")
 		
 		-- this is alot smoother but there is a chance that the vehicle clashes with the ground on last node because of the release spazz
@@ -638,15 +632,11 @@ local function pathTransition(transition, vehicle, dt)
 		
 	elseif transition.stage == 2 then
 		if data.timer:stop() < 500 then
-			if is_own then
-				vehicleMoveToPosition(vehicle, transition.portal.trigger:getPosition() + vec3(0, 0, 1), 100)
-			end
+			vehicleMoveToPosition(vehicle, transition.portal.trigger:getPosition() + vec3(0, 0, 1), 100)
 			return
 		end
-		if is_own then
-			local vel = -vehicle:getVelocity()
-			vehicle:applyClusterVelocityScaleAdd(vehicle:getRefNodeId(), 1, vel.x, vel.y, vel.z)
-		end
+		local vel = -vehicle:getVelocity()
+		vehicle:applyClusterVelocityScaleAdd(vehicle:getRefNodeId(), 1, vel.x, vel.y, vel.z)
 		data.to_pos = data.path[1]
 		data.to_id = 1
 		transition.stage = 3
@@ -655,9 +645,7 @@ local function pathTransition(transition, vehicle, dt)
 		local dist = dist3d(vehicle:getPosition(), data.to_pos)
 		if data.to_id < #data.path then
 			if dist > 1 then
-				if is_own then
-					vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED, 0)
-				end
+				vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED, 5)
 				return
 			else
 				data.to_id = data.to_id + 1
@@ -667,13 +655,9 @@ local function pathTransition(transition, vehicle, dt)
 			
 		else -- final node
 			if dist > 12 then
-				if is_own then
-					vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED, 20)
-				end
+				vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED, 20)
 			elseif dist > 1 then
-				if is_own then
-					vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED_FINAL, 5)
-				end
+				vehicleMoveToPosition(vehicle, data.to_pos, TRANSITION_PATH_SPEED_FINAL, 5)
 			else
 				transition.stage = 4
 			end
@@ -681,16 +665,14 @@ local function pathTransition(transition, vehicle, dt)
 	
 	elseif transition.stage == 4 then
 		--[[
-		if is_own then
-			local pos_vec = evalTPPosition(data.to_pos, vehicle)
-			local v_pos = vehicle:getPosition()
-			local t_dir = (pos_vec - v_pos):normalized()
-			local v_rot = quatFromDir(vehicle:getDirectionVector(), vehicle:getDirectionVectorUp())
-			local t_rot = v_rot:inversed() * quatFromDir(vec3(t_dir.x, t_dir.y, 0), vec3(0, 0, 1))
-			vehicle:setClusterPosRelRot(vehicle:getRefNodeId(), pos_vec.x, pos_vec.y, pos_vec.z + 0.2, t_rot.x, t_rot.y, t_rot.z, t_rot.w)
-			local vel = -vehicle:getVelocity()
-			vehicle:applyClusterVelocityScaleAdd(vehicle:getRefNodeId(), 1, vel.x, vel.y, vel.z)
-		end
+		local pos_vec = evalTPPosition(data.to_pos, vehicle)
+		local v_pos = vehicle:getPosition()
+		local t_dir = (pos_vec - v_pos):normalized()
+		local v_rot = quatFromDir(vehicle:getDirectionVector(), vehicle:getDirectionVectorUp())
+		local t_rot = v_rot:inversed() * quatFromDir(vec3(t_dir.x, t_dir.y, 0), vec3(0, 0, 1))
+		vehicle:setClusterPosRelRot(vehicle:getRefNodeId(), pos_vec.x, pos_vec.y, pos_vec.z + 0.2, t_rot.x, t_rot.y, t_rot.z, t_rot.w)
+		local vel = -vehicle:getVelocity()
+		vehicle:applyClusterVelocityScaleAdd(vehicle:getRefNodeId(), 1, vel.x, vel.y, vel.z)
 		]]
 		vehicle:setMeshAlpha(0.5, "", false)
 		data.timer:stopAndReset()
@@ -701,7 +683,7 @@ local function pathTransition(transition, vehicle, dt)
 			return
 		end
 		if isAnyVehicleInsideRadius(vehicle:getPosition(), 5, vehicle:getId()) then return end
-		vehicle:queueLuaCommand("obj:setGhostEnabled(false)")
+		vehicle:queueLuaCommand("electrics.values.portal_transition = false")
 		vehicle:setMeshAlpha(1, "", false)
 		vehicle:queueLuaCommand("portals.setState(false)")
 		return true
@@ -840,6 +822,7 @@ M.onEditorDeactivated = function()
 end
 
 M.onBeamNGTrigger = function(data)
+	if not isOwn(data.subjectID) then return end
 	local known = TRIGGERS[data.triggerName]
 	if known and data.event == "enter" then
 		if not TRANSITIONS[data.subjectID] and not known.portal.disabled then

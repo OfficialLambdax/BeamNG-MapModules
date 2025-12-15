@@ -6,7 +6,8 @@
 
 local M = {}
 
-local ENABLED = false
+local ROT_STABILIZE = false
+local TRANSITION_STATE = 0
 
 local min, max = math.min, math.max
 
@@ -16,16 +17,33 @@ local ROLL_PID = newPIDParallel(2, 0, 2)
 local VARBUF = {}
 
 M.setState = function(state)
-	ENABLED = state
+	ROT_STABILIZE = state
+end
+
+-- -------------------------------------------------------------------
+-- Game Events
+M.updateGFX = function()
+	if TRANSITION_STATE == electrics.values.portal_transition then return end
+	TRANSITION_STATE = electrics.values.portal_transition
+	
+	if TRANSITION_STATE == 1 then
+		obj:setGhostEnabled(true)
+		--obj:setGravity(0)
+	else
+		obj:setGhostEnabled(false)
+		--obj:setGravity(-9.8100004196167)
+	end
 end
 
 M.onExtensionLoaded = function()
 	enablePhysicsStepHook()
+	electrics.values.portal_transition = 0
 end
 
 M.onReset = function()
 	PITCH_PID:reset()
 	ROLL_PID:reset()
+	electrics.values.portal_transition = 0
 	
 	obj:queueGameEngineLua('portals.onVehicleReset(' .. obj:getId() .. ')')
 end
@@ -47,7 +65,7 @@ VARBUF.onPhysicsStep = {
 	vec3() -- torque
 }
 M.onPhysicsStep = function(dt)
-	if not ENABLED then return end
+	if not ROT_STABILIZE then return end
 	
 	for _, wheel in pairs(wheels.wheels) do
 		if not wheel.isBroken and wheel.downForceRaw > 0 then return end
