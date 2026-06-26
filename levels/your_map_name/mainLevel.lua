@@ -1,14 +1,17 @@
 -- Made by Neverless @ BeamMP. Problems, Questions or requests? Feel free to ask.
 
 --[[
-	hotreloads the mainLevel lua
-		extensions.reload("levels_" .. core_levels.getLevelName(getMissionFilename()) .. "_mainLevel")
-	
-	alternate
-		extensions.unload("mainLevel"); extensions.loadAtRoot("levels/" .. core_levels.getLevelName(getMissionFilename()) .. "/mainLevel", "")
+	Repository and example modules: https://github.com/OfficialLambdax/BeamNG-MapModules
+
+	Me notes
+		hotreloads the mainLevel lua
+			extensions.reload("levels_" .. core_levels.getLevelName(getMissionFilename()) .. "_mainLevel")
+
+		alternate
+			extensions.unload("mainLevel"); extensions.loadAtRoot("levels/" .. core_levels.getLevelName(getMissionFilename()) .. "/mainLevel", "")
 	
 	Todo
-		- Find a way to mount virtual pathes to other virtual pathes >>>without copying files<<<
+		- Find a way to mount virtual pathes to other virtual pathes >>>without copying files<<< (thats important, as we cannot ensure the deletion of these files duo to potential game crashes)
 			So everything from
 			/levels/map_name/lua	--to->	/lua/ge/extensions
 			/levels/map_name/vlua	--to->	/lua/vehicle/extensions
@@ -22,10 +25,10 @@
 ]]
 
 local M = {
-	_VERSION = '0.4' -- 01.06.2025 (DD.MM.YYYY)
+	_VERSION = '0.5' -- 26.06.2026 (DD.MM.YYYY)
 }
-local GE_MODULES = {}
-local VE_MODULES = {}
+local GE_MODULES = {} -- module | module path (path wo. .lua)
+local VE_MODULES = {} -- module | module path (path wo. .lua)
 local LEVEL_NAME = ''
 
 -- -------------------------------------------------------------------
@@ -59,17 +62,65 @@ end
 
 -- -------------------------------------------------------------------
 -- Module loader
-local function loadLevelModule(path)
-	local module = fileNameNoExt(path)
-	
-	local ok, r = pcall(extensions.loadAtRoot, path:sub(1, #path - 4), "")
+local function indexGEModules()
+	log('I', 'mainLevel.module_loader', 'Indexing GE modules for map "' .. LEVEL_NAME .. '"')
+	for _, path in ipairs(FS:directoryList('levels/' .. LEVEL_NAME .. '/lua/') or {}) do
+		if (fileExtension(path) or ''):lower() == 'lua' then
+			local module = fileNameNoExt(path)
+			GE_MODULES[module] = path:sub(1, #path - 4)
+			log('I', 'mainLevel.indexGEModules', '-> Learned of "' .. module .. '" GE module')
+		end
+	end
+end
+
+local function indexVEModules()
+	log('I', 'mainLevel.module_loader', 'Indexing VE modules for map "' .. LEVEL_NAME .. '"')
+	for _, path in ipairs(FS:directoryList('levels/' .. LEVEL_NAME .. '/vlua/') or {}) do
+		if (fileExtension(path) or ''):lower() == 'lua' then
+			local module = fileNameNoExt(path)
+			VE_MODULES[module] = path:sub(1, #path - 4)
+			log('I', 'mainLevel.indexVEModules', '-> Learned of "' .. module .. '" VE module')
+		end
+	end
+end
+
+local function loadLevelModule(module, path)
+	local ok, r = pcall(extensions.loadAtRoot, path, "")
 	if not ok then
-		log('E', 'mainLevel.module_loader', r)
+		log('E', 'mainLevel.loadLevelModule', r)
 		return
 	end
-	log('I', 'mainLevel.module_loader', '-> Loaded level module "' .. module .. '"')
-	
-	if _G[module] then table.insert(GE_MODULES, module) end
+	log('I', 'mainLevel.loadLevelModule', '-> Loaded level module "' .. module .. '"')
+end
+
+local function reloadVehicleModule(module, path)
+	local exec = 'extensions.unload("' .. module .. '"); extensions.loadAtRoot("' .. path .. '", ""); if ' .. module .. ' and ' .. module .. '.onReset then ' .. module .. '.onReset() end'
+	for _, vehicle in ipairs(getAllVehicles()) do
+		vehicle:queueLuaCommand(exec)
+	end
+end
+
+local function unloadGEModules()
+	log('I', 'mainLevel.unloadGEModules', 'Unloading all GE map modules')
+	for module, _ in pairs(GE_MODULES) do
+		local ok, r = pcall(extensions.unload, module)
+		if not ok then
+			log('E', 'mainLevel.unloadGEModules', r)
+		else
+			log('I', 'mainLevel.unloadGEModules', '-> Unloaded level module "' .. module .. '"')
+		end
+	end
+end
+
+local function unloadVEModules()
+	log('I', 'mainLevel.unloadVEModules', 'Unloading all VE map modules')
+	local exec = ''
+	for module, _ in pairs(VE_MODULES) do
+		exec = exec .. 'extensions.unload("' .. module .. '") '
+	end
+	for _, vehicle in ipairs(getAllVehicles()) do
+		vehicle:queueLuaCommand(exec)
+	end
 end
 
 -- -------------------------------------------------------------------
@@ -77,23 +128,24 @@ end
 local function vehicleInit(vehicle_id)
 	if #VE_MODULES == 0 then return end
 	local vehicle = getObjectByID(vehicle_id)
+
+	vehicle:queueLuaCommand("mainLevel = {}; mainLevel.findLib = function(lib_path) local try_path = string.format('/levels/%s/lua/%s', '" .. LEVEL_NAME .. "', lib_path); if FS:fileExists(try_path .. '.lua') then return try_path end; print(try_path); return lib_path end")
 	
 	local exec = ''
-	for _, module in ipairs(VE_MODULES) do
-		exec = exec .. 'extensions.loadAtRoot("' .. module .. '", "") '
+	for module, path in pairs(VE_MODULES) do
+		exec = exec .. 'extensions.loadAtRoot("' .. path .. '", "") '
 	end
 	vehicle:queueLuaCommand(exec)
 	
 	-- doing this because the game does it, but since our mods are loaded after full veh load and the reset event, we have todo it ourself.
 	local exec = ''
-	for _, module in ipairs(VE_MODULES) do
-		module = fileName(module)
+	for module, path in pairs(VE_MODULES) do
 		exec = exec .. 'if ' .. module .. ' and ' .. module .. '.onReset then ' .. module .. '.onReset() end '
 	end
 	vehicle:queueLuaCommand(exec)
 end
 
-local function hotreload()
+local function vehicleHotreload()
 	for _, vehicle in ipairs(getAllVehicles()) do
 		vehicleInit(vehicle:getId())
 	end
@@ -101,45 +153,19 @@ end
 
 local function init()
 	LEVEL_NAME = myLevelName()
-	log('I', 'mainLevel.module_loader', 'Loading GE modules for map "' .. LEVEL_NAME .. '"')
-	for _, path in ipairs(FS:directoryList('levels/' .. LEVEL_NAME .. '/lua/') or {}) do
-		if (fileExtension(path) or ''):lower() == 'lua' then
-			loadLevelModule(path)
-		end
+	indexGEModules()
+	indexVEModules()
+	for module, path in pairs(GE_MODULES) do
+		loadLevelModule(module, path)
 	end
-	
-	log('I', 'mainLevel.module_loader', 'Indexing VE modules for map "' .. LEVEL_NAME .. '"')
-	for _, path in ipairs(FS:directoryList('levels/' .. LEVEL_NAME .. '/vlua/') or {}) do
-		if (fileExtension(path) or ''):lower() == 'lua' then
-			table.insert(VE_MODULES, path:sub(1, #path - 4))
-			log('I', 'mainLevel.module_loader', '-> Learned of "' .. fileName(path) .. '"')
-		end
-	end
-	
-	hotreload()
+	vehicleHotreload()
 end
 
 local function unload()
-	log('I', 'mainLevel.module_loader', 'Unloading all GE map modules')
-	for _, module in ipairs(GE_MODULES) do
-		local ok, r = pcall(extensions.unload, module)
-		if not ok then
-			log('E', 'mainLevel.module_loader', r)
-		else
-			log('I', 'mainLevel.module_loader', '-> Unloaded level module "' .. module .. '"')
-		end
-	end
-	GE_MODULES = {}
-	
-	log('I', 'mainLevel.module_loader', 'Unloading all VE map modules')
-	local exec = ''
-	for _, module in ipairs(VE_MODULES) do
-		exec = exec .. 'extensions.unload("' .. fileName(module) .. '") '
-	end
-	for _, vehicle in ipairs(getAllVehicles()) do
-		vehicle:queueLuaCommand(exec)
-	end
-	VE_MODULES = {}
+	unloadGEModules()
+	table.clear(GE_MODULES)
+	unloadVEModules()
+	table.clear(VE_MODULES)
 end
 
 -- -------------------------------------------------------------------
@@ -172,6 +198,40 @@ end
 
 
 M.levelName = function() return LEVEL_NAME end
+
+M.reload = function()
+	--[[ -- this would be enough, but with the method below we are reloading THIS file as well
+	unload()
+	init()
+	]]
+	extensions.unload("mainLevel"); extensions.loadAtRoot("levels/" .. core_levels.getLevelName(getMissionFilename()) .. "/mainLevel", "")
+end
+
+M.reloadGE = function(extension_name)
+	local path = GE_MODULES[extension_name]
+	if path then
+		if not _G[extension_name] then return end
+		extensions.unload(extension_name)
+		loadLevelModule(extension_name, path)
+
+	elseif extension_name == nil then
+		unloadGEModules()
+		for module, path in pairs(GE_MODULES) do
+			loadLevelModule(module, path)
+		end
+	end
+end
+
+M.reloadVE = function(extension_name)
+	local path = VE_MODULES[extension_name]
+	if path then
+		reloadVehicleModule(extension_name, path)
+
+	elseif extension_name == nil then
+		unloadVEModules()
+		vehicleHotreload()
+	end
+end
 
 -- -------------------------------------------------------------------
 -- Game events
