@@ -20,22 +20,28 @@ But by doing this the map author unwillingly runs into a multitude of problems.
 
 However this problem can be circumvented. At map load the game looks if the level has a .lua file placed at `/levels/your_level_name/mainLevel.lua` and loads it. And on map unload automatically unloads it again. As such we can use this one lua file as the main entry and exit point to load custom lua extensions that are only to be present and loaded while the map is loaded.
 
-This module loader is what archives that. It prevents file conflicts and makes it possible for the user of it to also "on the fly" add, remove and reload extensions without having to fully reload the lua (CTRL+L), the map or the game as a whole.
+**This module loader is what archives that.** It prevents file conflicts and makes it possible for the user of it to also "on the fly" add, remove and reload extensions without having to fully reload the lua (CTRL+L), the map or the game as a whole.
 
 
 ### Installation
 1. Grab the file @ `/levels/your_map_name/mainLevel.lua` from this repository
 2. Open your maps level folder. Navigate to `/levels/your_map_name`
-3. And plaxe the `mainLevel.lua` right into it.
+3. And place the `mainLevel.lua` right into it.
 
 ### Usage
-General Environment (GE) lua moduls go into `/levels/your_level_name/lua`
+- General Environment (GE) lua moduls go into `/levels/your_level_name/lua`
 
-Vehicle lua modules (VE) go into `/levels/your_level_name/vlua`
+- Vehicle lua modules (VE) go into `/levels/your_level_name/vlua`
+
+- So eg. a GE lua extension like `autolights.lua` can just be placed as is into `/levels/your_level_name/lua/autolights.lua`. No `modScript.lua` needed. The module loader will load all extension from the `lua` and `vlua` folder automatically. **NOTE:** That only includes these two directories, not and of its subdirectories!
+
 
 ### Relatively Important Notes
+**Good news:** Regular GE and VE extension can just be copied into the respective folders and it will work! **Bad news:** Thats only almost true!
+
 Since the folder structure is different to regular GE and VE extensions you will have to load libaries, that you yourself added to your map, differently.
-- A simple `local MyLib = require("libs/MyLib")` will not find it.
+- First of all you want to place your libaries inside any subdirectory of `/levels/your_level_name/lua/*` eg. `lua/libs/`
+- It be expected that a simple `local MyLib = require("libs/MyLib")` will find it like it would in any regular extension. But it wont because `require()` doesnt look at these places.
 - You need to `local MyLib = require(mainLevel.findLib("libs/MyLib"))`
 - This also works when you want to remove a lib from the package cache for a reload by `package.loaded[mainLevel.findLib("libs/MyLib")] = nil`
 - `.findLib()` hasnt been well implemented in the VE extension space yet. The function there can only find libaries in the ge `lua` folder.
@@ -108,4 +114,4 @@ return M
 ```
 
 ### Examples
-You can find examples in the `/levels/your_map_name/lua` and `vlua` folder
+You can find examples, of various quality, in the `/levels/your_map_name/lua` and `vlua` folder
