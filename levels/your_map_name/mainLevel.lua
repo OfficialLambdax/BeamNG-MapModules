@@ -25,7 +25,7 @@
 ]]
 
 local M = {
-	_VERSION = '0.5' -- 26.06.2026 (DD.MM.YYYY)
+	_VERSION = '0.51' -- 26.06.2026 (DD.MM.YYYY)
 }
 local GE_MODULES = {} -- module | module path (path wo. .lua)
 local VE_MODULES = {} -- module | module path (path wo. .lua)
@@ -126,7 +126,7 @@ end
 -- -------------------------------------------------------------------
 -- Load/Unload
 local function vehicleInit(vehicle_id)
-	if #VE_MODULES == 0 then return end
+	if not next(VE_MODULES) then return end
 	local vehicle = getObjectByID(vehicle_id)
 
 	vehicle:queueLuaCommand("mainLevel = {}; mainLevel.findLib = function(lib_path) local try_path = string.format('/levels/%s/lua/%s', '" .. LEVEL_NAME .. "', lib_path); if FS:fileExists(try_path .. '.lua') then return try_path end; print(try_path); return lib_path end")
