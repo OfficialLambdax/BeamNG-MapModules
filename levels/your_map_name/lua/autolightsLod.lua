@@ -1,7 +1,9 @@
 -- Made by Neverless @ BeamMP. Problems, Questions or requests? Feel free to ask.
 
+local Vec3 = require(mainLevel.findLib("libs/Vec3"))
+
 local M = {
-	_VERSION = "0.2" -- 10.03.2026 (DD.MM.YYYY)
+	_VERSION = "0.3" -- 31.07.2026 (DD.MM.YYYY)
 }
 local ROOT_GROUP = 'autolights'
 
@@ -9,12 +11,28 @@ local ROOT_GROUP = 'autolights'
 	Format
 	[1..n] = table
 		[light] = obj
-		[id] = int (only used when world editor is open)
+		[pos] = Vec3
+		[id] = int
+		[type] = int
+			0 = PointLight
+			1 = SpotLight
 ]]
 local LIGHTS = {}
 local STATE = false
 local PERMA_LIGHT = false
 local INITIALIZED = false
+
+--[[
+	Spotlights have half the distance usually .. and PointLights sometimes as well (unknown as of why and when)
+	Settings name: GraphicClusteredQuality
+]]
+local DISTANCES = {
+	Ultra = 7500,
+	High = 5000,
+	Normal = 3700,
+	Low = 3000,
+	Lowest = 3000
+}
 
 -- --------------------------------------------------------------------------------
 -- Common
@@ -69,6 +87,52 @@ local function setTodInVehicle(vehicle, state)
 end
 
 -- --------------------------------------------------------------------------------
+-- Job
+local function lightRunnerJob(job)
+	local cam_pos = Vec3()
+	while INITIALIZED do
+		job.yield()
+		local max_distance = (DISTANCES[settings.getValue("GraphicClusteredQuality")] or DISTANCES.Normal) / 2
+		local tod = scenetree.tod
+		if tod then
+			local do_light = PERMA_LIGHT or (tod.time > 0.21 and tod.time < 0.77)
+			if do_light ~= STATE then -- if day/night has changed
+				STATE = do_light
+				for _, light in ipairs(LIGHTS) do
+					if scenetree.findObjectById(light.id) then -- check if instance is still valid
+						light.light.isEnabled = STATE
+					end
+				end
+
+				for _, vehicle in ipairs(getAllVehicles()) do
+					setTodInVehicle(vehicle, STATE)
+				end
+
+			elseif do_light then
+				cam_pos:set(core_camera.getPositionXYZ())
+				for index, light in ipairs(LIGHTS) do
+					if (index % 50) == 0 then
+						job.yield()
+						cam_pos:set(core_camera.getPositionXYZ())
+					end
+
+					if scenetree.findObjectById(light.id) then
+						--local dist = max_distance
+						--if light.type == 1 then dist = dist / 2 end
+						--local do_on = cam_pos:dist(light.pos) < dist
+						local do_on = cam_pos:dist(light.pos) < max_distance
+
+						if light.light.isEnabled ~= do_on then
+							light.light.isEnabled = do_on
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- --------------------------------------------------------------------------------
 -- Load / Unload
 local function init()
 	local root_group = scenetree[ROOT_GROUP]
@@ -91,12 +155,15 @@ local function init()
 	for _, light in ipairs(lights) do
 		table.insert(LIGHTS, {
 			light = light,
-			id = light:getId()
+			pos = Vec3(light:getPositionXYZ()),
+			id = light:getId(),
+			type = light:getClassName() == "PointLight" and 0 or 1
 		})
 		
 		light.isEnabled = false
 	end
 
+	core_jobsystem.create(lightRunnerJob, 0)
 	INITIALIZED = true
 end
 
@@ -108,26 +175,7 @@ end
 
 -- --------------------------------------------------------------------------------
 -- Game Events
-M.onUpdate = function(dt_real)
-	if not INITIALIZED then return end
-	local tod = scenetree.tod
-	if not tod then return end
-	
-	if not PERMA_LIGHT and (tod.time > 0.21 and tod.time < 0.77) == STATE then return end
-	if PERMA_LIGHT and PERMA_LIGHT == STATE then return end
-	STATE = not STATE -- true = night
-	
-	local we_open = editor.isEditorActive()
-	for _, light in ipairs(LIGHTS) do
-		if not we_open or (we_open and scenetree.findObjectById(light.id)) then
-			light.light.isEnabled = STATE
-		end
-	end
-	
-	for _, vehicle in ipairs(getAllVehicles()) do
-		setTodInVehicle(vehicle, STATE)
-	end
-end
+
 
 M.onVehicleSpawned = function(vehicle_id)
 	setTodInVehicle(getObjectByID(vehicle_id), STATE)
