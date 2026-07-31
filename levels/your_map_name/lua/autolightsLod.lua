@@ -1,7 +1,4 @@
 -- Made by Neverless @ BeamMP. Problems, Questions or requests? Feel free to ask.
-
-local Vec3 = require(mainLevel.findLib("libs/Vec3"))
-
 local M = {
 	_VERSION = "0.3" -- 31.07.2026 (DD.MM.YYYY)
 }
@@ -11,7 +8,7 @@ local ROOT_GROUP = 'autolights'
 	Format
 	[1..n] = table
 		[light] = obj
-		[pos] = Vec3
+		[pos] = vec3
 		[id] = int
 		[type] = int
 			0 = PointLight
@@ -89,13 +86,13 @@ end
 -- --------------------------------------------------------------------------------
 -- Job
 local function lightRunnerJob(job)
-	local cam_pos = Vec3()
+	local cam_pos = vec3()
 	while INITIALIZED do
 		job.yield()
 		local max_distance = (DISTANCES[settings.getValue("GraphicClusteredQuality")] or DISTANCES.Normal) / 2
 		local tod = scenetree.tod
 		if tod then
-			local do_light = PERMA_LIGHT or (tod.time > 0.21 and tod.time < 0.77)
+			local do_light = PERMA_LIGHT or isNight()
 			if do_light ~= STATE then -- if day/night has changed
 				STATE = do_light
 				for _, light in ipairs(LIGHTS) do
@@ -120,7 +117,7 @@ local function lightRunnerJob(job)
 						--local dist = max_distance
 						--if light.type == 1 then dist = dist / 2 end
 						--local do_on = cam_pos:dist(light.pos) < dist
-						local do_on = cam_pos:dist(light.pos) < max_distance
+						local do_on = cam_pos:distance(light.pos) < max_distance
 
 						if light.light.isEnabled ~= do_on then
 							light.light.isEnabled = do_on
@@ -155,7 +152,7 @@ local function init()
 	for _, light in ipairs(lights) do
 		table.insert(LIGHTS, {
 			light = light,
-			pos = Vec3(light:getPositionXYZ()),
+			pos = light:getPosition(),
 			id = light:getId(),
 			type = light:getClassName() == "PointLight" and 0 or 1
 		})
@@ -175,8 +172,6 @@ end
 
 -- --------------------------------------------------------------------------------
 -- Game Events
-
-
 M.onVehicleSpawned = function(vehicle_id)
 	setTodInVehicle(getObjectByID(vehicle_id), STATE)
 end
