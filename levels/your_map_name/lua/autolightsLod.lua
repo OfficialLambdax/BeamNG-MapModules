@@ -92,7 +92,7 @@ local function lightRunnerJob(job)
 		local max_distance = (DISTANCES[settings.getValue("GraphicClusteredQuality")] or DISTANCES.Normal) / 2
 		local tod = scenetree.tod
 		if tod then
-			local do_light = PERMA_LIGHT or isNight()
+			local do_light = PERMA_LIGHT or isNight(tod)
 			if do_light ~= STATE then -- if day/night has changed
 				STATE = do_light
 				for _, light in ipairs(LIGHTS) do
